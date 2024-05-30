@@ -8,8 +8,7 @@ export default function App() {
     <div>
       <Routes>
         <Route element={<Root_layout />}>
-          <Route index path="/dashboard" element={<AiChat />} />
-          <Route path="/" element={<Home />} />
+          <Route index path="/" element={<AiChat />} />
         </Route>
       </Routes>
     </div>

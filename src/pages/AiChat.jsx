@@ -14,12 +14,20 @@ import { useForm } from 'react-hook-form';
 import { formSchema } from '@/schema/inputSchema';
 import { zodResolver } from "@hookform/resolvers/zod";
 import axios from 'axios';
-import showdown from 'showdown'; // Import showdown package
+import showdown from 'showdown';
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 
 const AiChat = () => {
-  const [loading, setLoading] = useState(false);
-  const [blogResponse, setBlogResponse] = useState(null);
-  const [imageUrl, setImageUrl] = useState(null);
+  const [loadingText, setLoadingText] = useState(false);
+  const [loadingImage, setLoadingImage] = useState(false);
+  const [blogResponses, setBlogResponses] = useState([]);
+  const [imageUrls, setImageUrls] = useState([]);
 
   const form = useForm({
     resolver: zodResolver(formSchema),
@@ -29,58 +37,87 @@ const AiChat = () => {
   });
 
   async function onSubmit(values) {
-    setLoading(true);
+    setLoadingText(true);
+    setBlogResponses([]);
+    setImageUrls([]);
     try {
-      // Your API call code
-      const imageResponse = await axios.post(
-        "https://api.vansh.one/",
+      const requests = [
         {
-          model: "VisionBrush",
-          text: `Create Blog post Cover Image For Following Title: ${values.prompt}`
+          role: "user",
+          type: "text",
+          content: `Create Creative and engaging introduction part of blog for title with impressive and to the point large introduction of title: ${values.prompt}`,
         },
         {
-          headers: {
-            AuthKey: import.meta.env.VITE_VISION_API_KEY,
-          },
-        }
-      );
-
-      setImageUrl(imageResponse.data.Response); // Store the image URL
-
-      const blogResponse = await axios.post(
-        "https://api.vansh.one/",
+          role: "user",
+          type: "text",
+          content: `This is my title. Create a large and informative blog, full of information and content. Create detailed blog titled: ${values.prompt}`,
+        },
         {
-          model: "Vision",
-          tools: ["Brush"],
-          messages: [
-            {
-              role: "system",
-              type: "text",
-              content: "You are a helpful Blog Writer for the user. Create a detailed, informative, and engaging blog post for the user.",
+          role: "user",
+          type: "text",
+          content: `Write a concise and impactful summary for the blog titled avoid introduction and summary title etc. just focus on full content: ${values.prompt}`,
+        },
+      ];
+
+      for (const message of requests) {
+        // Generate text
+        const textResponse = await axios.post(
+          "https://api.vansh.one/",
+          {
+            model: "Vision",
+            tools: ["Brush"],
+            messages: [
+              {
+                role: "system",
+                type: "text",
+                content: "You are a helpful Blog Writer for the user. Create a detailed, informative, and engaging blog post for the user as long as possible. Very large and informative blog.",
+              },
+              message,
+            ],
+          },
+          {
+            headers: {
+              AuthKey: import.meta.env.VITE_VISION_API_KEY,
             },
-            {
-              role: "user",
-              type: "text",
-              content: values.prompt,
-            }
-          ],
-        },
-        {
-          headers: {
-            AuthKey: import.meta.env.VITE_VISION_API_KEY,
-          },
-        }
-      );
+          }
+        );
+        setBlogResponses((prevResponses) => [
+          ...prevResponses,
+          textResponse.data.Response[0].content,
+        ]);
 
-      setBlogResponse(blogResponse.data); // Store the blog response
+        // Generate image
+        const imageResponse = await axios.post(
+          "https://api.vansh.one/",
+          {
+            model: "VisionBrush",
+            text: `Create unique Blog post Cover Image For Following Title: ${values.prompt}`
+          },
+          {
+            headers: {
+              AuthKey: import.meta.env.VITE_VISION_API_KEY,
+            },
+          }
+        );
+        setImageUrls((prevUrls) => [
+          ...prevUrls,
+          imageResponse.data.Response[0].url,
+        ]);
+
+        // Optional delay between requests
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+
+      setLoadingText(false);
+      setLoadingImage(false);
     } catch (error) {
       console.error('Error:', error);
-    } finally {
-      setLoading(false);
+      setLoadingText(false);
+      setLoadingImage(false);
     }
   }
 
-  const converter = new showdown.Converter(); // Create a new showdown converter instance
+  const converter = new showdown.Converter();
 
   return (
     <div className='h-full'>
@@ -104,20 +141,37 @@ const AiChat = () => {
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="mt-5" disabled={loading}>
-                  {loading ? 'Loading...' : 'Submit'}
+                <Button type="submit" className="mt-5" disabled={loadingText || loadingImage}>
+                  {loadingText ? 'Generating Text...' : loadingImage ? 'Generating Image...' : 'Generate Blog'}
                 </Button>
               </form>
             </Form>
           </section>
         </Card>
 
-        {blogResponse && (
+        {blogResponses.length > 0 && (
           <Card className="w-[90%] md:w-[80%] h-full mt-5 p-4 shadow-md">
             <p className='font-bold text-left text-blue-700 text-2xl'>Generated Blog Post</p>
-            {imageUrl && <img src={imageUrl} alt="Generated Cover" className="mb-4 mt-5 rounded-md w-full h-fit" />}
+            {imageUrls.length > 0 && (
+              <Carousel>
+                <CarouselContent className="w-full h-full flex">
+                  {imageUrls.map((url, index) => (
+                    <CarouselItem key={index}>
+                      <img src={url} alt={`Slide ${index + 1}`} className='p-2' />
+                    </CarouselItem>
+                  ))}
+                </CarouselContent>
+                <CarouselPrevious className="absolute left-3" />
+                <CarouselNext className="absolute right-3" />
+              </Carousel>
+            )}
             <section className='mt-10'>
-              <div dangerouslySetInnerHTML={{ __html: converter.makeHtml(blogResponse.Response[0].content) }}></div>
+              {blogResponses.map((response, index) => (
+                <div key={index}>
+                  <div dangerouslySetInnerHTML={{ __html: converter.makeHtml(response) }}></div>
+                  {imageUrls[index] && <img src={imageUrls[index]} alt={`Generated for response ${index}`} className='p-2' />}
+                </div>
+              ))}
             </section>
           </Card>
         )}
