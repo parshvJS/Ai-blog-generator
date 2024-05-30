@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -15,19 +15,11 @@ import { formSchema } from '@/schema/inputSchema';
 import { zodResolver } from "@hookform/resolvers/zod";
 import axios from 'axios';
 import showdown from 'showdown';
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
 
 const AiChat = () => {
-  const [loadingText, setLoadingText] = useState(false);
-  const [loadingImage, setLoadingImage] = useState(false);
-  const [blogResponses, setBlogResponses] = useState([]);
-  const [imageUrls, setImageUrls] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [content, setContent] = useState([]);
+  const bottomRef = useRef(null);
 
   const form = useForm({
     resolver: zodResolver(formSchema),
@@ -36,10 +28,15 @@ const AiChat = () => {
     },
   });
 
+  useEffect(() => {
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [content]);
+
   async function onSubmit(values) {
-    setLoadingText(true);
-    setBlogResponses([]);
-    setImageUrls([]);
+    setLoading(true);
+    setContent([]);
     try {
       const requests = [
         {
@@ -81,9 +78,10 @@ const AiChat = () => {
             },
           }
         );
-        setBlogResponses((prevResponses) => [
-          ...prevResponses,
-          textResponse.data.Response[0].content,
+        const newText = textResponse.data.Response[0].content;
+        setContent((prevContent) => [
+          ...prevContent,
+          { type: 'text', content: newText },
         ]);
 
         // Generate image
@@ -99,21 +97,20 @@ const AiChat = () => {
             },
           }
         );
-        setImageUrls((prevUrls) => [
-          ...prevUrls,
-          imageResponse.data.Response[0].url,
+        const newImage = imageResponse.data.Response;
+        setContent((prevContent) => [
+          ...prevContent,
+          { type: 'image', content: newImage },
         ]);
 
         // Optional delay between requests
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
 
-      setLoadingText(false);
-      setLoadingImage(false);
+      setLoading(false);
     } catch (error) {
       console.error('Error:', error);
-      setLoadingText(false);
-      setLoadingImage(false);
+      setLoading(false);
     }
   }
 
@@ -141,40 +138,31 @@ const AiChat = () => {
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="mt-5" disabled={loadingText || loadingImage}>
-                  {loadingText ? 'Generating Text...' : loadingImage ? 'Generating Image...' : 'Generate Blog'}
+                <Button type="submit" className="mt-5" disabled={loading}>
+                  {loading ? 'Generating...' : 'Generate Blog'}
                 </Button>
               </form>
             </Form>
           </section>
         </Card>
 
-        {blogResponses.length > 0 && (
+        {content.length > 0 && (
           <Card className="w-[90%] md:w-[80%] h-full mt-5 p-4 shadow-md">
             <p className='font-bold text-left text-blue-700 text-2xl'>Generated Blog Post</p>
-            {imageUrls.length > 0 && (
-              <Carousel>
-                <CarouselContent className="w-full h-full flex">
-                  {imageUrls.map((url, index) => (
-                    <CarouselItem key={index}>
-                      <img src={url} alt={`Slide ${index + 1}`} className='p-2' />
-                    </CarouselItem>
-                  ))}
-                </CarouselContent>
-                <CarouselPrevious className="absolute left-3" />
-                <CarouselNext className="absolute right-3" />
-              </Carousel>
-            )}
             <section className='mt-10'>
-              {blogResponses.map((response, index) => (
+              {content.map((item, index) => (
                 <div key={index}>
-                  <div dangerouslySetInnerHTML={{ __html: converter.makeHtml(response) }}></div>
-                  {imageUrls[index] && <img src={imageUrls[index]} alt={`Generated for response ${index}`} className='p-2' />}
+                  {item.type === 'text' ? (
+                    <div dangerouslySetInnerHTML={{ __html: converter.makeHtml(item.content) }}></div>
+                  ) : (
+                    <img src={item.content} alt={`Generated for response ${index}`} className='p-2' />
+                  )}
                 </div>
               ))}
             </section>
           </Card>
         )}
+        <div ref={bottomRef} />
       </div>
     </div>
   );
