@@ -35,6 +35,7 @@ const AiChat = () => {
   }, [content]);
 
   async function onSubmit(values) {
+    console.log("Form submitted with values:", values);
     setLoading(true);
     setContent([]);
     try {
@@ -47,66 +48,81 @@ const AiChat = () => {
         {
           role: "user",
           type: "text",
-          content: `This is my title. Create a large and informative blog, full of information and content. Create detailed blog titled: ${values.prompt}`,
+          content: `This is my title. Create a large and informative blog, full of information and content, no introduction or summury.Create detailed blog titled: ${values.prompt}`,
         },
         {
           role: "user",
           type: "text",
-          content: `Write a concise and impactful summary for the blog titled avoid introduction and summary title etc. just focus on full content: ${values.prompt}`,
+          content: `Write a concise and impactful summary for the blog titled avoid introduction title etc. just focus on full content: ${values.prompt}`,
         },
       ];
 
       for (const message of requests) {
-        // Generate text
-        const textResponse = await axios.post(
-          "https://api.vansh.one/",
-          {
-            model: "Vision",
-            tools: ["Brush"],
-            messages: [
-              {
-                role: "system",
-                type: "text",
-                content: "You are a helpful Blog Writer for the user. Create a detailed, informative, and engaging blog post for the user as long as possible. Very large and informative blog.",
-              },
-              message,
-            ],
-          },
-          {
-            headers: {
-              AuthKey: import.meta.env.VITE_VISION_API_KEY,
-            },
-          }
-        );
-        const newText = textResponse.data.Response[0].content;
-        setContent((prevContent) => [
-          ...prevContent,
-          { type: 'text', content: newText },
-        ]);
+        console.log("Processing request:", message);
 
-        // Generate image
-        const imageResponse = await axios.post(
-          "https://api.vansh.one/",
-          {
-            model: "VisionBrush",
-            text: `Create unique Blog post Cover Image For Following Title: ${values.prompt}`
-          },
-          {
-            headers: {
-              AuthKey: import.meta.env.VITE_VISION_API_KEY,
+        try {
+          // Generate image
+          console.log("Generating image for:", values.prompt);
+          const imageResponse = await axios.post(
+            "https://api.vansh.one/",
+            {
+              model: "VisionBrush",
+              text: `Create unique Blog post Cover Image For Following Title: ${values.prompt}`
             },
-          }
-        );
-        const newImage = imageResponse.data.Response;
-        setContent((prevContent) => [
-          ...prevContent,
-          { type: 'image', content: newImage },
-        ]);
+            {
+              headers: {
+                AuthKey: import.meta.env.VITE_VISION_API_KEY,
+              },
+            }
+          );
+          const newImage = imageResponse.data.Response;
+          console.log("Generated image:", newImage);
+          setContent((prevContent) => [
+            ...prevContent,
+            { type: 'image', content: newImage },
+          ]);
+        } catch (imageError) {
+          console.error('Image generation error:', imageError);
+        }
+
+        try {
+          // Generate text
+          console.log("Generating text for request:", message);
+          const textResponse = await axios.post(
+            "https://api.vansh.one/",
+            {
+              model: "Vision",
+              tools: ["Brush"],
+              messages: [
+                {
+                  role: "system",
+                  type: "text",
+                  content: "You are a helpful Blog Writer for the user. Create a detailed, informative, and engaging blog post for the user as long as possible. Very large and informative blog.",
+                },
+                message,
+              ],
+            },
+            {
+              headers: {
+                AuthKey: import.meta.env.VITE_VISION_API_KEY,
+              },
+            }
+          );
+          const newText = textResponse.data.Response[0].content;
+          console.log("Generated text:", newText);
+          setContent((prevContent) => [
+            ...prevContent,
+            { type: 'text', content: newText },
+          ]);
+        } catch (textError) {
+          console.error('Text generation error:', textError);
+        }
 
         // Optional delay between requests
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
 
+      console.log("Final combined content:", content);
       setLoading(false);
     } catch (error) {
       console.error('Error:', error);
@@ -151,11 +167,13 @@ const AiChat = () => {
             <p className='font-bold text-left text-blue-700 text-2xl'>Generated Blog Post</p>
             <section className='mt-10'>
               {content.map((item, index) => (
-                <div key={index}>
+                <div key={index} className='mb-6'>
                   {item.type === 'text' ? (
                     <div dangerouslySetInnerHTML={{ __html: converter.makeHtml(item.content) }}></div>
                   ) : (
-                    <img src={item.content} alt={`Generated for response ${index}`} className='p-2' />
+                    <div className='flex justify-center'>
+                      <img src={item.content} alt={`Generated for response ${index}`} className='p-2 w-[60%]' />
+                    </div>
                   )}
                 </div>
               ))}
